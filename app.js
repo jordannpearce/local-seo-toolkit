@@ -83,7 +83,7 @@ $("tabs").addEventListener("click", (e) => {
 /* ---------------- Setup ---------------- */
 function fillCountries() { $("bizCountry").innerHTML = COUNTRIES.map(([n, c]) => `<option value="${c}">${esc(n)} (${c})</option>`).join(""); }
 fillCountries();
-function fillMapCountries() { $("mapCountry").innerHTML = COUNTRIES.map(([n]) => `<option>${esc(n)}</option>`).join(""); }
+function fillMapCountries() { const mc = $("mapCountry"); if (!mc) return; mc.innerHTML = COUNTRIES.map(([n]) => `<option>${esc(n)}</option>`).join(""); }
 fillMapCountries();
 function saveProfile() {
   const p = { website: $("bizWebsite").value, name: $("bizName").value, city: $("bizCity").value, area: $("bizArea").value, country: $("bizCountry").value, loc: $("bizLocCode").value, lang: $("bizLang").value, keyword: $("bizKeyword").value };
@@ -100,16 +100,16 @@ function loadProfile() {
   } catch {}
   syncFromProfile();
 }
+function setIf(id, v) { const el = $(id); if (el) el.value = v; }
 function syncFromProfile() {
-  $("mapBiz").value = $("bizName").value; $("mapCity").value = $("bizCity").value; $("mapKeyword").value = $("bizKeyword").value;
+  setIf("mapBiz", $("bizName").value); setIf("mapCity", $("bizCity").value); setIf("mapKeyword", $("bizKeyword").value);
   const areaParts = ($("bizArea").value || "").split(",").map((x) => x.trim()).filter(Boolean);
-  if (areaParts.length) $("mapState").value = areaParts[0];
+  if (areaParts.length) setIf("mapState", areaParts[0]);
   const cc = COUNTRIES.find(([, code]) => String(code) === String($("bizCountry").value));
-  if (cc) $("mapCountry").value = cc[0];
-  $("rankDomain").value = profileDomain(); $("blDomain").value = profileDomain(); $("domDomain").value = profileDomain();
-  $("auditUrl").value = $("bizWebsite").value; $("aiKeyword").value = $("bizName").value; $("secUrl").value = $("bizWebsite").value;
-  const kw = $("bizKeyword").value; if (kw && !$("rankKeywords").value) $("rankKeywords").value = kw;
-  if ($("bizName").value && !$("kwSeeds").value) $("kwSeeds").value = $("bizName").value;
+  if (cc) setIf("mapCountry", cc[0]);
+  setIf("rankDomain", $("bizWebsite").value); setIf("kwSeeds", $("bizKeyword").value); setIf("blDomain", $("bizWebsite").value); setIf("domDomain", $("bizWebsite").value); setIf("auditUrl", $("bizWebsite").value);
+  const kw = $("bizKeyword").value || $("bizName").value; setIf("aiKeyword", kw);
+  const site = $("bizWebsite").value.trim(); if (site) setIf("secUrl", site);
 }
 $("btnSaveProfile").addEventListener("click", saveProfile);
 $("btnTest").addEventListener("click", async () => {
