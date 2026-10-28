@@ -97,7 +97,7 @@ function loadProfile() {
 function syncFromProfile() {
   $("mapBiz").value = $("bizName").value; $("mapCity").value = $("bizCity").value; $("mapArea").value = $("bizArea").value; $("mapKeyword").value = $("bizKeyword").value;
   $("rankDomain").value = profileDomain(); $("blDomain").value = profileDomain(); $("domDomain").value = profileDomain();
-  $("auditUrl").value = $("bizWebsite").value; $("aiKeyword").value = $("bizName").value;
+  $("auditUrl").value = $("bizWebsite").value; $("aiKeyword").value = $("bizName").value; $("secUrl").value = $("bizWebsite").value;
   const kw = $("bizKeyword").value; if (kw && !$("rankKeywords").value) $("rankKeywords").value = kw;
   if ($("bizName").value && !$("kwSeeds").value) $("kwSeeds").value = $("bizName").value;
 }
@@ -406,4 +406,38 @@ $("btnDomTech").addEventListener("click", () => run("domResults", "domProgress",
   const rows = [];
   Object.entries(techs).forEach(([cat, groups]) => { if (groups && typeof groups === "object") Object.values(groups).flat().forEach((t) => { if (t && t.name) rows.push({ cat, tech: t.name, ver: t.version || "" }); }); });
   $("domResults").innerHTML = (rows.length ? table([{ label: "Category", key: "cat" }, { label: "Technology", key: "tech" }, { label: "Version", key: "ver" }], rows) : "<p class='hint'>No technology list parsed — see raw data below.</p>") + rawDetails(data);
+}));
+
+/* ---------------- Website Security Scanner ---------------- */
+function statusIcon(s) { return s === "pass" ? "✅ pass" : s === "warn" ? "⚠️ warn" : s === "fail" ? "❌ fail" : esc(s || "—"); }
+$("btnSecScan").addEventListener("click", () => run("secResults", "secProgress", async () => {
+  const url = $("secUrl").value.trim(); if (!url) throw new Error("Enter a website URL first.");
+  const out = await postJson("/api/security/scan", { url });
+  if (!out.ok) throw new Error(out.error || "Scan failed.");
+  const gradeColor = out.grade === "A" || out.grade === "B" ? "var(--good)" : out.grade === "C" ? "var(--accent)" : "var(--bad)";
+  let html = `<div class="cards">
+    <div class="card"><h4>Security grade</h4><div class="big" style="color:${gradeColor}">${esc(out.grade)} · ${out.score}/100</div><p>${esc(out.finalUrl)}<br>HTTP ${out.httpStatus} · ${out.responseTimeMs != null ? out.responseTimeMs + " ms" : ""} · Redirects: ${(out.redirectChain || []).length}<br>HTTPS enforced: ${out.httpsEnforced ? "✅ yes" : "❌ not detected"}</p></div>
+    <div class="card"><h4>Server</h4><p>Server: ${esc((out.serverInfo && out.serverInfo.server) || "not disclosed")}<br>X-Powered-By: ${esc((out.serverInfo && out.serverInfo.xPoweredBy) || "not disclosed")}<br>IP: ${esc((out.serverInfo && out.serverInfo.ipAddress) || "—")}<br>${esc((out.serverInfo && out.serverInfo.versionDisclosure) || "No version numbers disclosed — good.")}</p></div>
+    <div class="card"><h4>TLS certificate</h4><p>${out.tls ? `Status: ${statusIcon(out.tls.status)}<br>Protocol: ${esc(out.tls.protocol || "—")}<br>Issuer: ${esc(out.tls.issuer || "—")}<br>Valid: ${esc(out.tls.validFrom || "—")} → ${esc(out.tls.validTo || "—")}<br>Days remaining: ${out.tls.daysRemaining != null ? out.tls.daysRemaining : "—"}` : "Site is not serving HTTPS."}</p></div>
+  </div>`;
+  html += "<h3>Security headers & cookie flags</h3>" + table(
+    [{ label: "Check", key: "name" }, { label: "Status", key: "st" }, { label: "What we found", key: "detail" }, { label: "Header value", key: "value" }],
+    (out.headers || []).map((c) => ({ name: c.name, st: statusIcon(c.status), detail: c.detail || "", value: c.value || "—" })));
+  const tech = out.tech || [];
+  if (tech.length) html += "<h3>Platform & technology detected</h3>" + table(
+    [{ label: "Category", key: "category" }, { label: "Technology", key: "name" }, { label: "Evidence", key: "evidence" }], tech);
+  const f = out.files || {}; const sm = f.sitemap || {}; const rb = f.robots || {};
+  html += "<h3>Sitemap & robots.txt</h3>" + table(
+    [{ label: "File", key: "k" }, { label: "Found", key: "v" }, { label: "Details", key: "d" }],
+    [
+      { k: "sitemap.xml", v: sm.found ? "✅ yes" : "❌ no", d: `${sm.url || ""}${sm.entries != null ? " · " + sm.entries + " URL entries" : ""}${sm.alsoFromRobots ? " · declared in robots.txt" : ""}` },
+      { k: "robots.txt", v: rb.found ? "✅ yes" : "❌ no", d: `${rb.url || ""}${Array.isArray(rb.sitemapRefs) && rb.sitemapRefs.length ? " · Sitemaps declared: " + rb.sitemapRefs.join(", ") : ""}${rb.disallowCount != null ? " · Disallow rules: " + rb.disallowCount : ""}${rb.allowsAll ? " · allows all crawlers" : ""}` },
+    ]);
+  const em = out.email || {};
+  const emRow = (label, s) => s ? { k: label, v: statusIcon(s.status), d: (s.detail || "") + (s.record ? " Record: " + s.record : "") + (s.policy ? " Policy: " + s.policy : "") + (Array.isArray(s.hosts) && s.hosts.length ? " Hosts: " + s.hosts.join(", ") : "") + (Array.isArray(s.selectorsFound) && s.selectorsFound.length ? " Selectors found: " + s.selectorsFound.map((x) => x.selector || x).join(", ") : "") } : { k: label, v: "—", d: "" };
+  html += `<h3>Email security (${esc(em.domain || "")})</h3>` + table(
+    [{ label: "Check", key: "k" }, { label: "Status", key: "v" }, { label: "Details", key: "d" }],
+    [emRow("SPF", em.spf), emRow("DMARC", em.dmarc), emRow("DKIM", em.dkim), emRow("MX (mail servers)", em.mx)]);
+  html += rawDetails(out);
+  $("secResults").innerHTML = html;
 }));

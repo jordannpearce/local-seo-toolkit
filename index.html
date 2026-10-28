@@ -30,6 +30,7 @@
   <button data-tab="reputation">⭐ Reputation &amp; GBP</button>
   <button data-tab="ai">🤖 AI Optimization</button>
   <button data-tab="domain">🌐 Domain Analytics</button>
+  <button data-tab="security">🛡️ Security Scanner</button>
 </nav>
 
 <main>
@@ -203,6 +204,17 @@
   </div>
   <div class="progress hidden" id="domProgress"><div class="bar"></div><span>Fetching domain data…</span></div>
   <div id="domResults"></div>
+</section>
+
+<!-- ============ SECURITY SCANNER ============ -->
+<section id="tab-security" class="panel">
+  <h2>Website security scanner</h2>
+  <p class="hint">The same scanner built for Pearce Studios, included in full: a graded <strong>A–F report</strong> covering 8 security-header checks (HSTS, CSP, clickjacking, MIME-sniffing, XSS, Referrer-Policy, Permissions-Policy, and cookie/session flags — the external-scan side of CSRF hardening), server information disclosure, TLS certificate details, platform &amp; technology fingerprinting (CMS, frameworks, hosting, analytics), sitemap.xml &amp; robots.txt, and email security — <strong>SPF, DMARC (with policy), DKIM across 14 common selectors, and MX</strong>. No DataForSEO key needed for this one, and it's SSRF-guarded: private/internal addresses are refused.</p>
+  <label>Website URL<input id="secUrl" type="url" placeholder="https://www.yourbusiness.com"></label>
+  <div class="row"><button id="btnSecScan" class="primary">🛡️ Scan this website</button></div>
+  <div class="progress hidden" id="secProgress"><div class="bar"></div><span>Scanning headers, TLS, tech stack, sitemap, robots and email records…</span></div>
+  <div id="secResults"></div>
+  <div class="note">ℹ️ An external scan can only see what a site shows the public internet. It can't test login-protected areas, real CSRF tokens inside forms, or server-side code — use it as a fast outside-in checkup, not a penetration test.</div>
 </section>
 </main>
 

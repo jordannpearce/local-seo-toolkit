@@ -15,6 +15,12 @@ sent **one task per POST**.
 
 References: [SERP API](https://dataforseo.com/apis/serp-api)
 
+### Website Security Scanner (no DataForSEO key)
+
+| Route | What it does |
+|---|---|
+| `POST /api/security/scan` (alias `/api/website-scan`) | The Pearce Studios scanner, in full: fetches the public site with Node built-ins only (redirect hops followed manually), grades it A–F from 8 security-header checks (HSTS, CSP, clickjacking, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy, cookie flags/SameSite — the external side of CSRF hardening), server/version disclosure, TLS certificate (issuer, protocol, days remaining, HTTPS-enforcement probe), tech fingerprinting (CMS incl. WordPress/Drupal/Shopify/Wix/Squarespace; frameworks incl. Next.js/React/Vue/Angular; hosting & analytics), sitemap.xml + robots.txt, and email security via DNS (SPF, DMARC with policy parsing, DKIM across 14 common selectors, MX). Every target and redirect hop is SSRF-checked — hostnames resolving to private/reserved addresses are refused (pre-flight DNS check; DNS-rebinding TOCTOU is a documented limitation). |
+
 ## Generic proxy modules (app.js → /api/dfs)
 
 ### Rank Tracker

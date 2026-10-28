@@ -24,6 +24,7 @@ solutions.
 | ⭐ Reputation & GBP | Google Business Profile / business listing details, rating distribution across the web, review sentiment, and your **latest Google reviews** (with “no owner reply yet” flags) | Business Data API · Reviews API · Content Analysis API |
 | 🤖 AI Optimization | How your brand shows up in AI answers — LLM mentions search and top cited domains | AI Optimization API |
 | 🌐 Domain Analytics | WHOIS overview and the technology stack running a site | Domain Analytics API |
+| 🛡️ Security Scanner | The full Pearce Studios website security scanner: graded A–F report, 8 security-header checks (incl. cookie/CSRF-hardening flags), server info disclosure, TLS certificate, tech fingerprinting (CMS/frameworks/hosting/analytics), sitemap & robots.txt, and email security (SPF, DMARC policy, DKIM across 14 selectors, MX). SSRF-guarded; no API key needed | Built into the server (Node built-ins only) |
 
 ## Quick start
 
