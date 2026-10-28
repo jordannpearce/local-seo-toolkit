@@ -29,7 +29,9 @@ function setStatus(id, msg, cls) { const el = $(id); el.textContent = msg; el.cl
 
 async function postJson(path, body) {
   const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  return r.json();
+  const text = await r.text();
+  try { return JSON.parse(text); }
+  catch { throw new Error("The server answered with HTTP " + r.status + " instead of data — this copy of the tool is likely running an older server build. Redeploy/restart with the latest code, then hard-refresh (Ctrl/Cmd+Shift+R)."); }
 }
 /* One DataForSEO call via the server proxy. payload = ONE task object
    (Live endpoints accept exactly one task per POST). */
@@ -79,6 +81,8 @@ $("tabs").addEventListener("click", (e) => {
 /* ---------------- Setup ---------------- */
 function fillCountries() { $("bizCountry").innerHTML = COUNTRIES.map(([n, c]) => `<option value="${c}">${esc(n)} (${c})</option>`).join(""); }
 fillCountries();
+function fillMapCountries() { $("mapCountry").innerHTML = COUNTRIES.map(([n]) => `<option>${esc(n)}</option>`).join(""); }
+fillMapCountries();
 function saveProfile() {
   const p = { website: $("bizWebsite").value, name: $("bizName").value, city: $("bizCity").value, area: $("bizArea").value, country: $("bizCountry").value, loc: $("bizLocCode").value, lang: $("bizLang").value, keyword: $("bizKeyword").value };
   localStorage.setItem("lst_profile", JSON.stringify(p));
@@ -95,7 +99,11 @@ function loadProfile() {
   syncFromProfile();
 }
 function syncFromProfile() {
-  $("mapBiz").value = $("bizName").value; $("mapCity").value = $("bizCity").value; $("mapArea").value = $("bizArea").value; $("mapKeyword").value = $("bizKeyword").value;
+  $("mapBiz").value = $("bizName").value; $("mapCity").value = $("bizCity").value; $("mapKeyword").value = $("bizKeyword").value;
+  const areaParts = ($("bizArea").value || "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (areaParts.length) $("mapState").value = areaParts[0];
+  const cc = COUNTRIES.find(([, code]) => String(code) === String($("bizCountry").value));
+  if (cc) $("mapCountry").value = cc[0];
   $("rankDomain").value = profileDomain(); $("blDomain").value = profileDomain(); $("domDomain").value = profileDomain();
   $("auditUrl").value = $("bizWebsite").value; $("aiKeyword").value = $("bizName").value; $("secUrl").value = $("bizWebsite").value;
   const kw = $("bizKeyword").value; if (kw && !$("rankKeywords").value) $("rankKeywords").value = kw;
@@ -165,7 +173,8 @@ function drawGridPreview() {
 ["mapGrid", "mapSpacing"].forEach((id) => $(id).addEventListener("change", drawGridPreview));
 
 $("btnMapSearch").addEventListener("click", () => run("mapResults", "mapSearchProgress", async () => {
-  const out = await postJson("/api/business/search", { ...creds(), business: $("mapBiz").value, city: $("mapCity").value, state: $("mapArea").value, language_code: lang() });
+  const stateRegion = [$("mapState").value.trim(), $("mapCountry").value].filter(Boolean).join(", ");
+  const out = await postJson("/api/business/search", { ...creds(), business: $("mapBiz").value, city: $("mapCity").value, state: stateRegion, language_code: lang() });
   if (!out.ok) throw new Error(out.error || "Search failed.");
   $("mapResults").innerHTML = "<div class='cards'>" + out.results.map((r, i) =>
     `<div class="card"><h4>${esc(r.title)}</h4><p>${esc(r.category || "")}${r.address ? "<br>" + esc(r.address) : ""}</p><p>${r.rating != null ? "⭐ " + r.rating + " (" + fmt(r.ratingCount) + " reviews)" : "No rating shown"}</p><button data-pick="${i}">Use this business</button></div>`).join("") + "</div>";

@@ -1498,7 +1498,11 @@ const server = http.createServer(async (req, res) => {
     fs.stat(filePath, (err, st) => {
       if (err || !st.isFile()) filePath = path.join(ROOT, "index.html");
       const ext = path.extname(filePath).toLowerCase();
-      res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream", "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=3600" });
+      // App code (html/js/css) is served no-cache: after a redeploy, a cached
+      // app.js would leave buttons wired to an older build (e.g. a Scan button
+      // whose handler doesn't exist yet) — the classic "nothing happens".
+      const noCache = [".html", ".js", ".css"].includes(ext);
+      res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream", "Cache-Control": noCache ? "no-cache" : "public, max-age=3600" });
       fs.createReadStream(filePath).pipe(res);
     });
   } catch (err) {
