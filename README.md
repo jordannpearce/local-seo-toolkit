@@ -61,9 +61,14 @@ error instead of a fake “not found”. Business search accepts listings
 without coordinates but refuses to center a grid on a city center when the
 business's exact location is unknown — it resolves the real location first.
 
-Map tiles in the browser come from CARTO light basemaps with an Esri
-satellite toggle (Leaflet). Tile © OpenStreetMap contributors © CARTO;
-imagery © Esri.
+Map tiles are **OpenStreetMap** (Leaflet), loaded same-origin through the
+server's own `/tiles/{z}/{x}/{y}.png` proxy — the server fetches each tile
+from tile.openstreetmap.org with an identifying User-Agent and caches it,
+the pattern OSM's tile usage policy asks of apps. Browsers never request
+OSM tiles directly, so they can't be served a blocked-tile placeholder.
+Selecting a business pre-loads the map with a ★ marker on the business and
+the full grid of scan points, fitted to view. Tiles © OpenStreetMap
+contributors.
 
 ## Privacy & security
 

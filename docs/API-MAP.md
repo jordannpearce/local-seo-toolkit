@@ -12,6 +12,7 @@ sent **one task per POST**.
 | `POST /api/test` | `GET /v3/appendix/user_data` | Setup — test connection |
 | `POST /api/business/search` | `POST /v3/serp/google/maps/live/advanced` (depth 20, `search_this_area`, coordinate-centered on the geocoded city in any country) | Maps tab — find the business; exact-match listings without coordinates are geocoded to their real location before a grid is centered |
 | `POST /api/maps/scan` | `POST /v3/serp/google/maps/live/advanced` — **one request per grid point**, pool of 5, depth 100 → depth-20 retry, three-way match (place_id → coords ≤0.002° → suffix-stripped name) | Maps tab — grid scan |
+| `GET /tiles/{z}/{x}/{y}.png` | OpenStreetMap tile proxy (server-side fetch with identifying `TILE_UA`, in-memory cache, 400 on invalid coordinates) | Maps tab — Leaflet basemap. The browser never calls tile.openstreetmap.org directly, and there is no CARTO layer. Selecting a business draws the ★ marker + the exact grid points on this map and fits them to view (same behavior as the standalone Maps Rank Tracker). |
 
 References: [SERP API](https://dataforseo.com/apis/serp-api)
 

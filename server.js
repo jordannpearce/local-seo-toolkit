@@ -1352,6 +1352,59 @@ async function handleWebsiteScan(req, res) {
   });
 }
 
+/* ---------------- Map tile proxy (OpenStreetMap) ---------------- */
+// The Rank Checker map loads tiles same-origin from /tiles/{z}/{x}/{y}.png.
+// This proxy fetches them from tile.openstreetmap.org with an identifying
+// User-Agent (what OSM's tile usage policy asks of apps — generic browser
+// user-agents get served a blocked-tile image) and caches them in memory.
+// No other tile source is involved.
+
+const TILE_UA = process.env.TILE_UA || "LocalSEOToolkit/1.0 (self-hosted maps rank tracker)";
+const TILE_CACHE_MAX = 500;
+const tileCache = new Map(); // key "z/x/y" -> { contentType, body }
+
+async function handleTile(req, res, z, x, y) {
+  const key = z + "/" + x + "/" + y;
+  const hit = tileCache.get(key);
+  if (hit) {
+    // Refresh recency so frequently used tiles are evicted last.
+    tileCache.delete(key);
+    tileCache.set(key, hit);
+    res.writeHead(200, {
+      "Content-Type": hit.contentType,
+      "Cache-Control": "public, max-age=86400",
+    });
+    return res.end(hit.body);
+  }
+  try {
+    const upstream = await fetch(
+      "https://tile.openstreetmap.org/" + z + "/" + x + "/" + y + ".png",
+      { headers: { "User-Agent": TILE_UA } }
+    );
+    if (!upstream.ok) {
+      return sendTileError(res, "Tile unavailable (OpenStreetMap returned " + upstream.status + ").");
+    }
+    const body = Buffer.from(await upstream.arrayBuffer());
+    const contentType = upstream.headers.get("content-type") || "image/png";
+    if (tileCache.size >= TILE_CACHE_MAX) {
+      tileCache.delete(tileCache.keys().next().value); // evict oldest
+    }
+    tileCache.set(key, { contentType, body });
+    res.writeHead(200, {
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=86400",
+    });
+    return res.end(body);
+  } catch (err) {
+    return sendTileError(res, "Tile unavailable (" + err.message + ").");
+  }
+}
+
+function sendTileError(res, message) {
+  res.writeHead(502, { "Content-Type": "text/plain; charset=utf-8" });
+  res.end(message);
+}
+
 /* ---------------- Generic DataForSEO proxy (allowlisted) ----------------
    Every other module in the toolkit (SERP rank tracking, Labs, Keywords
    Data, On-Page, Backlinks, Business Data, Reviews, Content Analysis,
@@ -1433,6 +1486,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/maps/scan") return await handleRankScan(req, res);
     if (req.method === "POST" && (url.pathname === "/api/security/scan" || url.pathname === "/api/website-scan")) return await handleWebsiteScan(req, res);
     if (req.method === "POST" && url.pathname === "/api/dfs") return await handleDfsProxy(req, res);
+    const tileMatch = req.method === "GET" ? url.pathname.match(/^\/tiles\/(\d{1,2})\/(\d+)\/(\d+)\.png$/) : null;
+    if (tileMatch) {
+      const z = +tileMatch[1], x = +tileMatch[2], y = +tileMatch[3];
+      if (z > 19 || x >= 2 ** z || y >= 2 ** z) { res.writeHead(400); return res.end("Invalid tile coordinates."); }
+      return await handleTile(req, res, z, x, y);
+    }
     if (req.method !== "GET") { res.writeHead(405); return res.end("Method not allowed"); }
     let filePath = url.pathname === "/" ? path.join(ROOT, "index.html") : path.join(ROOT, decodeURIComponent(url.pathname));
     if (!filePath.startsWith(ROOT)) { res.writeHead(403); return res.end("Forbidden"); }

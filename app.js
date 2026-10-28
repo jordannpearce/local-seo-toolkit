@@ -122,16 +122,29 @@ $("btnTest").addEventListener("click", async () => {
 loadProfile();
 
 /* ---------------- Maps Rank Tracker ---------------- */
-let map = null, gridLayer = null, selectedBiz = null;
-function initMap() {
-  if (map || typeof L === "undefined") return;
-  map = L.map("map").setView([20, 0], 2);
-  const carto = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", { attribution: "© OpenStreetMap contributors © CARTO", maxZoom: 19 });
-  const sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "Imagery © Esri", maxZoom: 19 });
-  carto.addTo(map); L.control.layers({ "Street (CARTO)": carto, "Satellite (Esri)": sat }).addTo(map);
+let map = null, gridLayer = null, selectedBiz = null, tilesSeen = false;
+function bizIcon() { return L.divIcon({ className: "", html: '<div class="biz-pin">★</div>', iconSize: [34, 34], iconAnchor: [17, 17] }); }
+/* Lazy init (only when the Maps tab is actually used) — a Leaflet map
+   created inside a hidden panel renders at the wrong size. Tiles are
+   OpenStreetMap, loaded same-origin through this server's /tiles proxy,
+   exactly like the standalone Maps Rank Tracker. No CARTO. */
+function ensureMap() {
+  if (map) return true;
+  if (typeof L === "undefined") return false;
+  map = L.map("map", { scrollWheelZoom: true }).setView([20, 0], 2);
+  const tiles = L.tileLayer("/tiles/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" });
+  tiles.on("tileload", () => { tilesSeen = true; });
+  tiles.on("tileerror", () => { if (!tilesSeen) $("mapScanInfo").textContent = "Map tiles are taking a moment to load — the grid is set; give it a few seconds."; });
+  tiles.addTo(map);
   gridLayer = L.layerGroup().addTo(map);
+  return true;
 }
-initMap();
+function fitToPoints(pts, pad) {
+  if (!map || !pts.length) return;
+  const b = L.latLngBounds(pts.map((pt) => [pt.lat, pt.lng]));
+  const show = () => { if (!map) return; map.invalidateSize(); map.fitBounds(b.pad(pad)); };
+  requestAnimationFrame(show); setTimeout(show, 180); setTimeout(() => { if (map) map.invalidateSize(); }, 450);
+}
 function gridPoints(center, size, spacingMi) {
   const half = (size - 1) / 2, pts = [];
   const latStep = spacingMi / 69.0, lngStep = spacingMi / (69.0 * Math.cos(center.lat * Math.PI / 180));
@@ -139,20 +152,21 @@ function gridPoints(center, size, spacingMi) {
   return pts;
 }
 function drawGridPreview() {
-  if (!map || !selectedBiz || selectedBiz.lat == null) return;
-  gridLayer.clearLayers();
+  if (!selectedBiz || selectedBiz.lat == null) return;
+  if (!ensureMap()) return;
   const size = parseInt($("mapGrid").value, 10), spacing = parseFloat($("mapSpacing").value);
-  L.marker([selectedBiz.lat, selectedBiz.lng]).addTo(gridLayer).bindPopup("★ " + esc(selectedBiz.title));
-  gridPoints(selectedBiz, size, spacing).forEach((p) => L.circleMarker([p.lat, p.lng], { radius: 4, color: "#2ea6ff" }).addTo(gridLayer));
-  map.setView([selectedBiz.lat, selectedBiz.lng], size >= 9 || spacing >= 3 ? 10 : 12);
-  $("mapScanInfo").textContent = `${size}×${size} = ${size * size} points × 1 Live request each`;
+  const pts = gridPoints(selectedBiz, size, spacing);
+  gridLayer.clearLayers();
+  pts.forEach((pt) => L.circleMarker([pt.lat, pt.lng], { radius: 6, color: "#fff", weight: 2, fillColor: "#38bdf8", fillOpacity: 0.95 }).addTo(gridLayer).bindPopup("Scan point — this exact spot will be checked."));
+  L.marker([selectedBiz.lat, selectedBiz.lng], { icon: bizIcon(), zIndexOffset: 1000 }).addTo(gridLayer).bindPopup("<b>" + esc(selectedBiz.title) + "</b>" + (selectedBiz.address ? "<br>" + esc(selectedBiz.address) : "")).openPopup();
+  fitToPoints(pts, 0.12);
+  $("mapScanInfo").textContent = `Grid pre-loaded for ${selectedBiz.title} — ${size}×${size} (${pts.length} points, ${spacing} mi apart) on OpenStreetMap. Hit Run grid scan when the keyword is right.`;
 }
 ["mapGrid", "mapSpacing"].forEach((id) => $(id).addEventListener("change", drawGridPreview));
 
 $("btnMapSearch").addEventListener("click", () => run("mapResults", "mapSearchProgress", async () => {
   const out = await postJson("/api/business/search", { ...creds(), business: $("mapBiz").value, city: $("mapCity").value, state: $("mapArea").value, language_code: lang() });
   if (!out.ok) throw new Error(out.error || "Search failed.");
-  initMap();
   $("mapResults").innerHTML = "<div class='cards'>" + out.results.map((r, i) =>
     `<div class="card"><h4>${esc(r.title)}</h4><p>${esc(r.category || "")}${r.address ? "<br>" + esc(r.address) : ""}</p><p>${r.rating != null ? "⭐ " + r.rating + " (" + fmt(r.ratingCount) + " reviews)" : "No rating shown"}</p><button data-pick="${i}">Use this business</button></div>`).join("") + "</div>";
   window._mapResults = out.results;
@@ -160,7 +174,7 @@ $("btnMapSearch").addEventListener("click", () => run("mapResults", "mapSearchPr
     selectedBiz = window._mapResults[parseInt(b.dataset.pick, 10)];
     if (selectedBiz.lat == null) { $("mapScanInfo").textContent = "That listing came back without coordinates — pick a listing with a street address, or search again."; return; }
     $("btnMapScan").disabled = false; drawGridPreview();
-    $("mapScanInfo").textContent = `Selected: ${selectedBiz.title} — grid preview loaded.`;
+    $("map").scrollIntoView({ behavior: "smooth", block: "center" });
   }));
 }));
 
@@ -177,14 +191,15 @@ $("btnMapScan").addEventListener("click", () => run("mapTable", "mapScanProgress
     { t: "In top 3", big: s.top3Pct + "%", d: "Share of grid points" },
     { t: "In top 10", big: s.top10Pct + "%", d: "Share of grid points" },
   ]);
-  if (map) {
+  if (ensureMap()) {
     gridLayer.clearLayers();
-    L.marker([selectedBiz.lat, selectedBiz.lng]).addTo(gridLayer).bindPopup("★ " + esc(selectedBiz.title));
+    L.marker([selectedBiz.lat, selectedBiz.lng], { icon: bizIcon(), zIndexOffset: 1000 }).addTo(gridLayer).bindPopup("<b>" + esc(selectedBiz.title) + "</b>");
     out.points.forEach((p) => {
       const label = p.error ? "!" : (p.found ? String(p.rank) : "—");
       L.marker([p.lat, p.lng], { icon: L.divIcon({ className: "", html: `<span class="rankpin ${rankClass(p.found ? p.rank : null)}">${label}</span>`, iconSize: [30, 24] }) }).addTo(gridLayer)
         .bindPopup(p.error ? esc(p.error) : (p.found ? `Rank #${p.rank} · matched by ${esc(p.matchedBy)} · ${p.itemsCount} listings checked` : `Not in top results · ${p.itemsCount != null ? p.itemsCount + " listings checked" : ""}<br>Top: ${esc((p.topTitles || []).join(" · "))}`));
     });
+    fitToPoints(out.points, 0.08);
   }
   $("mapTable").innerHTML = table(
     [{ label: "Point", key: "i" }, { label: "Rank", key: "r" }, { label: "Listings checked", key: "n" }, { label: "Matched by", key: "m" }, { label: "Top result there", key: "top" }],
