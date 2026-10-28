@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Local SEO Toolkit — BYO DataForSEO Key</title>
+<meta name="description" content="Free, open-source local SEO toolkit powered by your own DataForSEO API key: Maps grid rank tracker, Google rank tracker, keyword research, site audit, content analysis, backlinks, reputation management, GBP data and AI optimization.">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">◎</div>
+    <div>
+      <h1>Local SEO Toolkit</h1>
+      <p>Bring your own DataForSEO key · Free &amp; open source · Nothing is stored on a server</p>
+    </div>
+  </div>
+  <div id="connBadge" class="badge badge-off">Not connected</div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="setup" class="active">⚙️ Setup &amp; Business</button>
+  <button data-tab="maps">📍 Maps Rank Tracker</button>
+  <button data-tab="rank">🏆 Rank Tracker</button>
+  <button data-tab="keywords">🔑 Keywords</button>
+  <button data-tab="audit">🩺 Site &amp; Content Audit</button>
+  <button data-tab="backlinks">🔗 Backlinks</button>
+  <button data-tab="reputation">⭐ Reputation &amp; GBP</button>
+  <button data-tab="ai">🤖 AI Optimization</button>
+  <button data-tab="domain">🌐 Domain Analytics</button>
+</nav>
+
+<main>
+<!-- ============ SETUP ============ -->
+<section id="tab-setup" class="panel active">
+  <h2>1 · Your DataForSEO key</h2>
+  <p class="hint">Sign up at <a href="https://dataforseo.com/?aff=toolkit" target="_blank" rel="noopener">dataforseo.com</a>, then use your <strong>API login</strong> (your account email) and <strong>API password</strong> (Dashboard → API Access — not your website password). Your key is sent only to DataForSEO, per request. It is never stored on any server. Tick the box below only if you want this browser to remember it on this device.</p>
+  <div class="grid2">
+    <label>API login (email)<input id="dfsLogin" type="email" autocomplete="off" placeholder="you@example.com"></label>
+    <label>API password<input id="dfsPassword" type="password" autocomplete="off" placeholder="API password from DataForSEO dashboard"></label>
+  </div>
+  <label class="check"><input type="checkbox" id="rememberKey"> Remember key in this browser only (localStorage on your own device)</label>
+  <div class="row">
+    <button id="btnTest" class="primary">Test connection</button>
+    <span id="testResult" class="status"></span>
+  </div>
+  <div id="accountInfo" class="cards"></div>
+
+  <h2>2 · Your business &amp; website</h2>
+  <p class="hint">These details pre-fill every tool below. They are saved only in this browser.</p>
+  <div class="grid2">
+    <label>Website URL<input id="bizWebsite" type="url" placeholder="https://www.yourbusiness.com"></label>
+    <label>Business name<input id="bizName" type="text" placeholder="As it appears on Google"></label>
+    <label>City / area<input id="bizCity" type="text" placeholder="e.g. Hayward"></label>
+    <label>Country / region<input id="bizArea" type="text" placeholder="e.g. California, USA — or just France"></label>
+    <label>Country (DataForSEO location)
+      <select id="bizCountry"></select>
+    </label>
+    <label>Custom location_code (optional override)<input id="bizLocCode" type="number" placeholder="e.g. 2840 = United States"></label>
+    <label>Language code<input id="bizLang" type="text" placeholder="en"></label>
+    <label>Main keyword<input id="bizKeyword" type="text" placeholder="e.g. plumber near me"></label>
+  </div>
+  <div class="row"><button id="btnSaveProfile" class="primary">Save business profile</button><span id="profileSaved" class="status"></span></div>
+  <div class="note">💡 Cost note: DataForSEO charges per request on <em>your</em> account. Live SERP calls are a few cents each; a 5×5 Maps grid is 25 calls. Start small, then scale up.</div>
+</section>
+
+<!-- ============ MAPS ============ -->
+<section id="tab-maps" class="panel">
+  <h2>Google Maps grid rank tracker</h2>
+  <p class="hint">Find your business on Google Maps in any country, pick the right listing, then scan a geo-grid around it for any keyword — the same per-point method used by pro grid trackers.</p>
+  <div class="grid2">
+    <label>Business name<input id="mapBiz" type="text"></label>
+    <label>City / area<input id="mapCity" type="text"></label>
+    <label>Country / region<input id="mapArea" type="text"></label>
+    <label>Keyword to track<input id="mapKeyword" type="text" placeholder="e.g. dentist near me"></label>
+    <label>Grid size
+      <select id="mapGrid"><option>3</option><option selected>5</option><option>7</option><option>9</option><option>13</option></select>
+    </label>
+    <label>Point spacing (miles)
+      <select id="mapSpacing"><option>0.5</option><option selected>1</option><option>2</option><option>3</option><option>5</option><option>10</option></select>
+    </label>
+  </div>
+  <div class="row"><button id="btnMapSearch" class="primary">🔎 Search Google Maps for my business</button></div>
+  <div class="progress hidden" id="mapSearchProgress"><div class="bar"></div><span>Searching Google Maps…</span></div>
+  <div id="mapResults" class="cards"></div>
+  <h3>Your map &amp; grid preview</h3>
+  <div id="map" class="map"></div>
+  <div class="row"><button id="btnMapScan" class="primary" disabled>Run grid scan</button><span id="mapScanInfo" class="status"></span></div>
+  <div class="progress hidden" id="mapScanProgress"><div class="bar"></div><span>Scanning grid points, one Live request per point…</span></div>
+  <div id="mapSummary" class="cards"></div>
+  <div id="mapTable"></div>
+</section>
+
+<!-- ============ RANK ============ -->
+<section id="tab-rank" class="panel">
+  <h2>Google rank tracker + ranked pages (DataForSEO Labs)</h2>
+  <h3>Live position check</h3>
+  <div class="grid2">
+    <label>Keywords (one per line)<textarea id="rankKeywords" rows="4" placeholder="plumber near me&#10;emergency plumber"></textarea></label>
+    <label>Your domain<input id="rankDomain" type="text" placeholder="yourbusiness.com"></label>
+  </div>
+  <div class="row"><button id="btnRankCheck" class="primary">Check positions on Google</button></div>
+  <div class="progress hidden" id="rankProgress"><div class="bar"></div><span>Checking live Google results…</span></div>
+  <div id="rankResults"></div>
+
+  <h3>Ranked pages explorer</h3>
+  <p class="hint">Domain overview, every keyword your site ranks for, your top ranking pages, and new keyword opportunities — the views from DataForSEO's rank-tracking app, powered by Labs data.</p>
+  <div class="row">
+    <button data-labs="overview" class="labsBtn">Domain rank overview</button>
+    <button data-labs="ranked" class="labsBtn">Ranked keywords</button>
+    <button data-labs="toppages" class="labsBtn">Top ranking pages</button>
+    <button data-labs="forsites" class="labsBtn">Keywords for this site</button>
+  </div>
+  <div class="progress hidden" id="labsProgress"><div class="bar"></div><span>Pulling Labs data…</span></div>
+  <div id="labsResults"></div>
+</section>
+
+<!-- ============ KEYWORDS ============ -->
+<section id="tab-keywords" class="panel">
+  <h2>Keyword tool</h2>
+  <label>Seed keywords (one per line)<textarea id="kwSeeds" rows="4" placeholder="plumber&#10;water heater repair"></textarea></label>
+  <div class="row">
+    <button id="btnKwVolume" class="primary">Search volume &amp; CPC (Google Ads data)</button>
+    <button id="btnKwIdeas">Keyword suggestions (Labs)</button>
+    <button id="btnKwIntent">Search intent (Labs)</button>
+  </div>
+  <div class="progress hidden" id="kwProgress"><div class="bar"></div><span>Fetching keyword data…</span></div>
+  <div id="kwResults"></div>
+</section>
+
+<!-- ============ AUDIT ============ -->
+<section id="tab-audit" class="panel">
+  <h2>Site crawl, on-page &amp; content analysis</h2>
+  <div class="grid2">
+    <label>Page / site URL<input id="auditUrl" type="url" placeholder="https://www.yourbusiness.com"></label>
+    <label>Max pages for full crawl<input id="auditMaxPages" type="number" value="25" min="1" max="1000"></label>
+  </div>
+  <div class="row">
+    <button id="btnInstantPage" class="primary">Instant page audit (On-Page API)</button>
+    <button id="btnStartCrawl">Start full site crawl</button>
+    <button id="btnContentSearch">Content analysis: mentions of my business/brand</button>
+    <button id="btnContentSummary">Content summary for my domain</button>
+  </div>
+  <div class="progress hidden" id="auditProgress"><div class="bar"></div><span>Working… crawls can take a few minutes — this panel polls automatically.</span></div>
+  <div id="auditResults"></div>
+</section>
+
+<!-- ============ BACKLINKS ============ -->
+<section id="tab-backlinks" class="panel">
+  <h2>Backlink checker</h2>
+  <label>Target domain<input id="blDomain" type="text" placeholder="yourbusiness.com"></label>
+  <div class="row">
+    <button id="btnBlSummary" class="primary">Backlink summary</button>
+    <button id="btnBlList">Top backlinks</button>
+    <button id="btnBlRef">Referring domains</button>
+    <button id="btnBlAnchors">Anchors</button>
+  </div>
+  <div class="progress hidden" id="blProgress"><div class="bar"></div><span>Fetching backlink data…</span></div>
+  <div id="blResults"></div>
+</section>
+
+<!-- ============ REPUTATION ============ -->
+<section id="tab-reputation" class="panel">
+  <h2>Reputation management &amp; Google Business Profile</h2>
+  <p class="hint">Uses the business you pick in the Maps tab (or the name/city/country from Setup). Pull your GBP/listing details, ratings across the web, review sentiment, and your latest Google reviews.</p>
+  <div class="row">
+    <button id="btnRepListing" class="primary">Business listing &amp; GBP info</button>
+    <button id="btnRepRatings">Rating distribution across the web</button>
+    <button id="btnRepSentiment">Review sentiment analysis</button>
+    <button id="btnRepReviews">Latest Google reviews</button>
+  </div>
+  <div class="progress hidden" id="repProgress"><div class="bar"></div><span>Fetching reputation data… review tasks can take a few minutes — this panel polls automatically.</span></div>
+  <div id="repResults"></div>
+</section>
+
+<!-- ============ AI ============ -->
+<section id="tab-ai" class="panel">
+  <h2>AI optimization — LLM mentions</h2>
+  <p class="hint">See how your brand and domain show up in AI answers (ChatGPT, Gemini, Muse, Perplexity and more) via DataForSEO's AI Optimization API.</p>
+  <div class="grid2">
+    <label>Brand / keyword to look for<input id="aiKeyword" type="text" placeholder="your business name"></label>
+    <label>Platform
+      <select id="aiPlatform"><option value="">All platforms</option><option>chat_gpt</option><option>gemini</option><option>claude</option><option>perplexity</option></select>
+    </label>
+  </div>
+  <div class="row">
+    <button id="btnAiMentions" class="primary">Search LLM mentions</button>
+    <button id="btnAiTopDomains">Top domains in AI answers</button>
+  </div>
+  <div class="progress hidden" id="aiProgress"><div class="bar"></div><span>Searching AI answers…</span></div>
+  <div id="aiResults"></div>
+</section>
+
+<!-- ============ DOMAIN ============ -->
+<section id="tab-domain" class="panel">
+  <h2>Domain analytics</h2>
+  <label>Domain<input id="domDomain" type="text" placeholder="yourbusiness.com"></label>
+  <div class="row">
+    <button id="btnDomWhois" class="primary">WHOIS overview</button>
+    <button id="btnDomTech">Technologies on the site</button>
+  </div>
+  <div class="progress hidden" id="domProgress"><div class="bar"></div><span>Fetching domain data…</span></div>
+  <div id="domResults"></div>
+</section>
+</main>
+
+<footer>
+  <p>Local SEO Toolkit — free and open source. Built on the <a href="https://dataforseo.com/apis" target="_blank" rel="noopener">DataForSEO APIs</a> (SERP, Labs, Keywords Data, On-Page, Backlinks, Business Data, Reviews, Content Analysis, Domain Analytics, AI Optimization). Your API key pays DataForSEO directly — this tool charges nothing and stores nothing.</p>
+  <p>Maps grid method: one Live request per grid point, depth 100 with a depth-20 retry, matched by place ID → coordinates → name. See <code>docs/API-MAP.md</code> in the repo for every endpoint used.</p>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
