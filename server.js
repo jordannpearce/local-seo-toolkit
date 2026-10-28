@@ -1469,7 +1469,10 @@ async function handleDfsProxy(req, res) {
     if (!data) return sendJson(res, 200, { ok: false, error: "DataForSEO returned an unreadable response (HTTP " + upstream.status + ")." });
     if (upstream.status === 401 || data.status_code === 40100)
       return sendJson(res, 200, { ok: false, error: dfsCredsError(upstream.status, data), data });
-    const taskErr = Array.isArray(data.tasks) && data.tasks[0] && typeof data.tasks[0].status_code === "number" && data.tasks[0].status_code >= 40000
+    // 40601/40602/40603 = Task Handed / In Queue / In Progress — a task that is
+    // still running is NOT an error; the page keeps polling for its result.
+    const TASK_PENDING = [40601, 40602, 40603];
+    const taskErr = Array.isArray(data.tasks) && data.tasks[0] && typeof data.tasks[0].status_code === "number" && data.tasks[0].status_code >= 40000 && !TASK_PENDING.includes(data.tasks[0].status_code)
       ? data.tasks[0].status_code + ": " + (data.tasks[0].status_message || "task error") : null;
     return sendJson(res, 200, { ok: !taskErr, error: taskErr, data });
   } catch (err) {

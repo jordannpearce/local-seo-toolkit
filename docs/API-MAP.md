@@ -46,9 +46,9 @@ Reference: [Keywords Data API](https://dataforseo.com/apis/keyword-data-api)
 
 ### Site & Content Audit
 - `POST /v3/on_page/instant_pages` — instant single-page audit (score, meta, checks, timings)
-- `POST /v3/on_page/task_post` → poll `GET /v3/on_page/summary/{id}` → `POST /v3/on_page/pages` — full crawl
-- `POST /v3/content_analysis/search/live` — web content mentioning the brand
-- `POST /v3/content_analysis/summary/live` — domain content summary & sentiment
+- `POST /v3/on_page/task_post` → poll `GET /v3/on_page/summary/{id}` → `POST /v3/on_page/pages` — full crawl (`task_post` requires `target` = the bare domain; `start_url` is optional)
+- `POST /v3/content_analysis/search/live` — web content mentioning the brand (`keyword` + `search_mode: "as_is"`; scope to your site with a `main_domain` filter — there is no `target_domain` field and `search_mode` only accepts values like `as_is`)
+- `POST /v3/content_analysis/summary/live` — brand citation summary & sentiment (`keyword` is the required field; polarity counts are in `connotation_types`, emotional tone in `sentiment_connotations`)
 
 References: [On-Page API](https://dataforseo.com/apis/on-page-api) ·
 [Content Analysis API](https://dataforseo.com/apis/content-analysis-api)
@@ -63,23 +63,23 @@ Reference: [Backlinks API](https://dataforseo.com/apis/backlinks-api)
 
 ### Reputation & GBP
 - `POST /v3/business_data/business_listings/search/live` — GBP/business listing details (rating, reviews count, photos, claimed, place_id)
-- `POST /v3/content_analysis/rating_distribution/live` — rating distribution across the web
+- `POST /v3/content_analysis/rating_distribution/live` — rating distribution across the web (one result entry per rating band, each with its own `metrics`)
 - `POST /v3/content_analysis/sentiment_analysis/live` — review/content sentiment
-- `POST /v3/reviews/google/task_post` → poll `GET /v3/reviews/google/task_get/{id}` — latest Google reviews + owner-reply flags
+- `POST /v3/reviews/google/task_post` → poll `GET /v3/reviews/google/task_get/{id}` — latest Google reviews + owner-reply flags (task status 40601/40602/40603 means handed/queued/in progress — keep polling, it is not an error)
 
 References: [API-driven reputation management](https://dataforseo.com/solutions/api-driven-reputation-management) ·
 [Business Data API](https://dataforseo.com/apis/business-data-api) ·
 [Reviews API](https://dataforseo.com/apis/reviews-api)
 
 ### AI Optimization
-- `POST /v3/ai_optimization/llm_mentions/search/live` — brand mentions in AI answers (filterable by platform in the UI)
+- `POST /v3/ai_optimization/llm_mentions/search/live` — brand mentions in AI answers (`target` is an ARRAY of `{keyword}` / `{domain}` entities; `platform` is `google` or `chat_gpt`)
 - `POST /v3/ai_optimization/llm_mentions/top_domains/live` — most-cited domains for a keyword
 
 Reference: [AI Optimization API](https://dataforseo.com/apis/ai-optimization-api)
 
 ### Domain Analytics
 - `POST /v3/domain_analytics/whois/overview/live`
-- `POST /v3/domain_analytics/technologies/domain_technologies/live`
+- `POST /v3/domain_analytics/technologies/domain_technologies/live` — technology values are arrays of name strings per group; the UI also surfaces a Pixels & analytics detection card (Google Analytics, Tag Manager, Meta/TikTok pixels, …)
 
 Reference: [Domain Analytics API](https://dataforseo.com/apis/domain-analytics-api)
 

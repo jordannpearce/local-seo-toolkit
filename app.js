@@ -44,6 +44,8 @@ async function dfs(apiPath, task, method) {
 function firstTask(data) { return data && Array.isArray(data.tasks) ? data.tasks[0] : null; }
 function firstResult(data) { const t = firstTask(data); return t && Array.isArray(t.result) ? t.result[0] : null; }
 function itemsOf(data) { const r = firstResult(data); return r && Array.isArray(r.items) ? r.items : []; }
+function resultsOf(data) { const t = firstTask(data); return t && Array.isArray(t.result) ? t.result : []; }
+const TASK_PENDING = [40601, 40602, 40603]; // Task Handed / In Queue / In Progress — keep polling, not errors
 function rawDetails(data) { return `<details><summary>Raw DataForSEO response</summary><pre class="raw">${esc(JSON.stringify(data, null, 2).slice(0, 20000))}</pre></details>`; }
 function table(cols, rows) {
   if (!rows.length) return "<p class='hint'>No rows returned.</p>";
@@ -63,7 +65,7 @@ async function pollTask(apiPath, tries, delayMs, boxId) {
     const data = await dfs(apiPath, null, "GET");
     const t = firstTask(data);
     if (t && t.status_code === 20000 && Array.isArray(t.result) && t.result.length) return data;
-    if (t && typeof t.status_code === "number" && t.status_code >= 40000) throw new Error(t.status_code + ": " + (t.status_message || "task failed"));
+    if (t && typeof t.status_code === "number" && t.status_code >= 40000 && !TASK_PENDING.includes(t.status_code)) throw new Error(t.status_code + ": " + (t.status_message || "task failed"));
     if (boxId) $(boxId).innerHTML = `<p class="hint">Task is still running on DataForSEO… check ${i + 1}/${tries}. You can leave this tab open.</p>`;
     await sleep(delayMs);
   }
@@ -296,7 +298,7 @@ $("btnInstantPage").addEventListener("click", () => run("auditResults", "auditPr
 $("btnStartCrawl").addEventListener("click", () => run("auditResults", "auditProgress", async () => {
   const url = $("auditUrl").value.trim(); if (!url) throw new Error("Enter your site URL first.");
   const maxPages = Math.min(1000, Math.max(1, parseInt($("auditMaxPages").value, 10) || 25));
-  const post = await dfs("/v3/on_page/task_post", { start_url: url, max_crawl_pages: maxPages, load_resources: true, enable_javascript: false, calculate_keyword_density: false });
+  const post = await dfs("/v3/on_page/task_post", { target: domainOf(url), start_url: url, max_crawl_pages: maxPages, load_resources: true, enable_javascript: false });
   const t = firstTask(post); const id = t && t.id; if (!id) throw new Error("DataForSEO did not return a crawl task id.");
   $("auditResults").innerHTML = `<p class="hint">Crawl started (task ${esc(id)}). Polling its summary…</p>`;
   let summary = null;
@@ -308,26 +310,29 @@ $("btnStartCrawl").addEventListener("click", () => run("auditResults", "auditPro
     $("auditResults").innerHTML = `<p class="hint">Crawl status: ${esc(st || "…")} · pages crawled so far: ${r && r.crawl_progress ? (r.crawl_progress.pages_crawled || 0) : 0} (check ${i + 1}/30)</p>`;
     if (st === "finished") { summary = r; break; }
   }
-  const pagesData = await dfs("/v3/on_page/pages", { id, limit: 100, order_by: ["meta.onpage_score,desc"] });
+  const pagesData = await dfs("/v3/on_page/pages", { id, limit: 100 });
   const rows = itemsOf(pagesData).map((p) => ({ url: p.url, score: p.meta && p.meta.onpage_score != null ? Math.round(p.meta.onpage_score) : (p.onpage_score != null ? Math.round(p.onpage_score) : "—"), title: (p.meta && p.meta.title) || "", status: p.status_code, issues: p.page_metrics ? (p.page_metrics.broken_links || 0) + (p.page_metrics.broken_resources || 0) : "—" }));
   $("auditResults").innerHTML = (summary ? cards([{ t: "Pages crawled", big: summary.page_metrics ? summary.page_metrics.pages_in_queue + summary.crawl_progress.pages_crawled : summary.crawl_progress.pages_crawled, d: "Full-site crawl via On-Page API" }, { t: "Avg on-page score", big: summary.page_metrics && summary.page_metrics.onpage_score != null ? Math.round(summary.page_metrics.onpage_score) : "—", d: "" }]) : "<p class='hint'>Crawl is still running on DataForSEO — the pages below are what is ready so far.</p>")
     + table([{ label: "Page", key: "url" }, { label: "Score", key: "score" }, { label: "Title", key: "title" }, { label: "HTTP", key: "status" }, { label: "Broken links/resources", key: "issues" }], rows) + rawDetails(pagesData);
 }));
 $("btnContentSearch").addEventListener("click", () => run("auditResults", "auditProgress", async () => {
   const kw = $("bizName").value.trim() || $("aiKeyword").value.trim(); if (!kw) throw new Error("Set your business/brand name in Setup first.");
-  const data = await dfs("/v3/content_analysis/search/live", { keyword: kw, search_mode: "one_domain", target_domain: profileDomain() || undefined, order_by: ["content_info.sentiment_connotations.positive,desc"], limit: 50 });
+  const domS = profileDomain();
+  const data = await dfs("/v3/content_analysis/search/live", { keyword: kw, search_mode: "as_is", ...(domS ? { filters: [["main_domain", "=", domS]] } : {}), order_by: ["content_info.sentiment_connotations.positive,desc"], limit: 50 });
   const rows = itemsOf(data).map((i) => ({ title: i.page_category && i.url ? i.url : (i.url || i.title || ""), url: i.url, lang: i.language, sentiment: i.content_info && i.content_info.sentiment_connotations ? "👍 " + (i.content_info.sentiment_connotations.positive || 0) + " / 👎 " + (i.content_info.sentiment_connotations.negative || 0) : "", rating: i.aggregate_rating ? (i.aggregate_rating.value + " (" + i.aggregate_rating.votes_count + ")") : "" }));
   $("auditResults").innerHTML = "<h3>Web content mentioning your brand</h3>" + table([{ label: "Page", key: "url" }, { label: "Language", key: "lang" }, { label: "Sentiment (+ / −)", key: "sentiment" }, { label: "Aggregate rating", key: "rating" }], rows) + rawDetails(data);
 }));
 $("btnContentSummary").addEventListener("click", () => run("auditResults", "auditProgress", async () => {
-  const dom = profileDomain(); if (!dom) throw new Error("Set your website URL in Setup first.");
-  const data = await dfs("/v3/content_analysis/summary/live", { target_domain: dom });
-  const r = firstResult(data) || {};
+  const kw = $("bizName").value.trim() || $("aiKeyword").value.trim(); if (!kw) throw new Error("Set your business/brand name in Setup first.");
+  const data = await dfs("/v3/content_analysis/summary/live", { keyword: kw, internal_list_limit: 8 });
+  const r = firstResult(data) || {}; const ct = r.connotation_types || {};
   $("auditResults").innerHTML = cards([
-    { t: "Pages analysed", big: fmt(r.total_count || 0), d: dom },
-    { t: "Average rating found", big: r.rating && r.rating.value != null ? r.rating.value : "—", d: "Aggregate across analysed pages" },
-    { t: "Sentiment", d: r.sentiment_connotations ? `Positive ${r.sentiment_connotations.positive || 0} · Negative ${r.sentiment_connotations.negative || 0} · Neutral ${r.sentiment_connotations.neutral || 0}` : "—" },
-    { t: "Top categories", d: ((r.top_categories || []).slice(0, 5).map((c) => (c.relative_url || c.category || "")).filter(Boolean).join(", ") || "See raw data") },
+    { t: "Pages citing your brand", big: fmt(r.total_count || 0), d: kw },
+    { t: "Positive", big: fmt(ct.positive || 0), d: "Citations with positive connotation" },
+    { t: "Negative", big: fmt(ct.negative || 0), d: "Citations with negative connotation" },
+    { t: "Neutral", big: fmt(ct.neutral || 0), d: "Citations with neutral connotation" },
+    { t: "Top domains citing you", d: ((r.top_domains || []).slice(0, 6).map((d) => `${d.domain} (${fmt(d.count || 0)})`).join(", ") || "See raw data") },
+    { t: "Emotional tone", d: r.sentiment_connotations ? Object.entries(r.sentiment_connotations).filter(([, v]) => v > 0).sort((x, y) => y[1] - x[1]).slice(0, 4).map(([k, v]) => `${k}: ${fmt(v)}`).join(" · ") || "—" : "—" },
   ]) + rawDetails(data);
 }));
 
@@ -371,20 +376,21 @@ $("btnRepListing").addEventListener("click", () => run("repResults", "repProgres
   $("repResults").innerHTML = rows.map((i) => { const r = i.rating || {}; return `<div class="card" style="margin-bottom:10px"><h4>${esc(i.title)}</h4><p>${esc(i.category || "")}<br>${esc(i.address || "")}<br>${esc(i.phone || "")}<br>${i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.url)}</a>` : ""}</p><p>⭐ ${r.value != null ? r.value : "—"} (${fmt(r.votes_count || 0)} reviews) · Place ID: ${esc(i.place_id || "—")}<br>Photos: ${i.total_photos != null ? i.total_photos : "—"} · Claimed: ${i.is_claimed != null ? (i.is_claimed ? "yes" : "no") : "—"}</p></div>`; }).join("") + rawDetails(data);
 }));
 $("btnRepRatings").addEventListener("click", () => run("repResults", "repProgress", async () => {
-  const data = await dfs("/v3/content_analysis/rating_distribution/live", { keyword: bizKeywordStr(), location_code: locCode(), language_code: lang(), search_mode: "one_domain", target_domain: profileDomain() || undefined });
-  const r = firstResult(data) || {}; const metrics = r.metrics || {};
-  const dist = [];
-  ["positive", "negative", "neutral"].forEach((k) => { if (metrics[k]) dist.push({ band: k, count: metrics[k].aggregate_rating ? metrics[k].aggregate_rating.votes_count : (metrics[k].items_count || 0), avg: metrics[k].aggregate_rating ? metrics[k].aggregate_rating.value : "" }); });
-  $("repResults").innerHTML = "<h3>Rating distribution for content about your business</h3>" + table([{ label: "Sentiment band", key: "band" }, { label: "Items", key: "count" }, { label: "Average rating", key: "avg" }], dist) + rawDetails(data);
+  const data = await dfs("/v3/content_analysis/rating_distribution/live", { keyword: bizKeywordStr(), search_mode: "as_is", internal_list_limit: 10 });
+  const bands = resultsOf(data);
+  const dist = bands.map((b) => { const m = b.metrics || {}; const ct = m.connotation_types || {}; return { band: `${b.min} – ${b.max}`, count: fmt(m.total_count || 0), pos: fmt(ct.positive || 0), neg: fmt(ct.negative || 0), neu: fmt(ct.neutral || 0) }; });
+  $("repResults").innerHTML = "<h3>Rating distribution for content about your business</h3><p class='hint'>Each row is one content-rating band (share of negative↔positive tone in the citation, 0–1).</p>" + table([{ label: "Rating band", key: "band" }, { label: "Citations", key: "count" }, { label: "Positive", key: "pos" }, { label: "Negative", key: "neg" }, { label: "Neutral", key: "neu" }], dist) + rawDetails(data);
 }));
 $("btnRepSentiment").addEventListener("click", () => run("repResults", "repProgress", async () => {
-  const data = await dfs("/v3/content_analysis/sentiment_analysis/live", { keyword: bizKeywordStr(), location_code: locCode(), language_code: lang(), search_mode: "one_domain", target_domain: profileDomain() || undefined });
+  const data = await dfs("/v3/content_analysis/sentiment_analysis/live", { keyword: bizKeywordStr(), search_mode: "as_is", internal_list_limit: 10 });
   const r = firstResult(data) || {};
+  const ct2 = r.connotation_types || {};
   $("repResults").innerHTML = cards([
     { t: "Pages analysed", big: fmt(r.total_count || 0), d: "" },
-    { t: "Positive connotations", big: fmt(r.sentiment_connotations ? (r.sentiment_connotations.positive || 0) : 0), d: "" },
-    { t: "Negative connotations", big: fmt(r.sentiment_connotations ? (r.sentiment_connotations.negative || 0) : 0), d: "" },
-    { t: "Neutral", big: fmt(r.sentiment_connotations ? (r.sentiment_connotations.neutral || 0) : 0), d: "" },
+    { t: "Positive connotations", big: fmt(ct2.positive || 0), d: "" },
+    { t: "Negative connotations", big: fmt(ct2.negative || 0), d: "" },
+    { t: "Neutral", big: fmt(ct2.neutral || 0), d: "" },
+    { t: "Emotional tone", d: r.sentiment_connotations ? Object.entries(r.sentiment_connotations).filter(([, v]) => v > 0).sort((x, y) => y[1] - x[1]).slice(0, 4).map(([k, v]) => `${k}: ${fmt(v)}`).join(" · ") || "—" : "—" },
   ]) + rawDetails(data);
 }));
 $("btnRepReviews").addEventListener("click", () => run("repResults", "repProgress", async () => {
@@ -399,14 +405,17 @@ $("btnRepReviews").addEventListener("click", () => run("repResults", "repProgres
 /* ---------------- AI Optimization ---------------- */
 $("btnAiMentions").addEventListener("click", () => run("aiResults", "aiProgress", async () => {
   const kw = $("aiKeyword").value.trim(); if (!kw) throw new Error("Enter a brand or keyword first.");
-  const data = await dfs("/v3/ai_optimization/llm_mentions/search/live", { keyword: kw, location_code: locCode(), language_code: lang(), limit: 50 });
+  const aiTarget = [{ keyword: kw, search_scope: ["answer"] }]; const aiDom = profileDomain(); if (aiDom) aiTarget.push({ domain: aiDom });
+  const aiPlat = $("aiPlatform").value;
+  const data = await dfs("/v3/ai_optimization/llm_mentions/search/live", { target: aiTarget, location_code: locCode(), language_code: lang(), limit: 50, ...(aiPlat ? { platform: aiPlat } : {}) });
   let rows = itemsOf(data).map((i) => ({ platform: i.platform || i.ai_model || "", question: (i.question || i.prompt || "").slice(0, 160), mentions: i.mentions_count != null ? i.mentions_count : (Array.isArray(i.mentions) ? i.mentions.length : ""), domain: i.domain || profileDomain() }));
   const plat = $("aiPlatform").value; if (plat) rows = rows.filter((r) => String(r.platform).toLowerCase().includes(plat.replace("_", " ")) || String(r.platform).toLowerCase().includes(plat));
   $("aiResults").innerHTML = table([{ label: "AI platform", key: "platform" }, { label: "Question / prompt", key: "question" }, { label: "Mentions", key: "mentions" }], rows) + rawDetails(data);
 }));
 $("btnAiTopDomains").addEventListener("click", () => run("aiResults", "aiProgress", async () => {
   const kw = $("aiKeyword").value.trim(); if (!kw) throw new Error("Enter a brand or keyword first.");
-  const data = await dfs("/v3/ai_optimization/llm_mentions/top_domains/live", { keyword: kw, location_code: locCode(), language_code: lang(), limit: 50 });
+  const aiPlat2 = $("aiPlatform").value;
+  const data = await dfs("/v3/ai_optimization/llm_mentions/top_domains/live", { target: [{ keyword: kw }], location_code: locCode(), language_code: lang(), limit: 50, ...(aiPlat2 ? { platform: aiPlat2 } : {}) });
   const rows = itemsOf(data).map((i) => ({ domain: i.domain, mentions: i.mentions_count, share: i.share_of_voice != null ? i.share_of_voice : "" }));
   $("aiResults").innerHTML = table([{ label: "Domain cited in AI answers", key: "domain" }, { label: "Mentions", key: "mentions" }, { label: "Share of voice", key: "share" }], rows) + rawDetails(data);
 }));
@@ -428,8 +437,13 @@ $("btnDomTech").addEventListener("click", () => run("domResults", "domProgress",
   const data = await dfs("/v3/domain_analytics/technologies/domain_technologies/live", { target: d });
   const r = firstResult(data) || {}; const techs = r.technologies || {};
   const rows = [];
-  Object.entries(techs).forEach(([cat, groups]) => { if (groups && typeof groups === "object") Object.values(groups).flat().forEach((t) => { if (t && t.name) rows.push({ cat, tech: t.name, ver: t.version || "" }); }); });
-  $("domResults").innerHTML = (rows.length ? table([{ label: "Category", key: "cat" }, { label: "Technology", key: "tech" }, { label: "Version", key: "ver" }], rows) : "<p class='hint'>No technology list parsed — see raw data below.</p>") + rawDetails(data);
+  Object.entries(techs).forEach(([cat, groups]) => { if (groups && typeof groups === "object") Object.entries(groups).forEach(([group, list]) => { (Array.isArray(list) ? list : [list]).forEach((t) => { const nm = typeof t === "string" ? t : (t && t.name); if (nm) rows.push({ cat, group, tech: nm, ver: (t && t.version) || "" }); }); }); });
+  const PIXEL_CHECKS = [["Google Analytics", /google analytics/i], ["Google Tag Manager", /google tag manager/i], ["Meta Pixel (Facebook)", /(meta|facebook)\s*(pixel|connect)/i], ["TikTok Pixel", /tiktok/i], ["Snapchat Pixel", /snapchat|snap\s*pixel/i], ["Pinterest Tag", /pinterest/i], ["LinkedIn Insight Tag", /linkedin insight/i], ["Microsoft Clarity", /microsoft clarity|clarity/i], ["Hotjar", /hotjar/i], ["HubSpot tracking", /hubspot/i], ["Matomo (Piwik)", /matomo|piwik/i], ["Plausible Analytics", /plausible/i], ["Segment", /^segment$/i], ["X (Twitter) Ads pixel", /twitter (ads|pixel)|x pixel/i]];
+  const detected = PIXEL_CHECKS.filter(([, re]) => rows.some((x) => re.test(x.tech))).map(([label]) => label);
+  const seen = new Set(rows.map((x) => x.tech.toLowerCase()));
+  const pixelHtml = `<div class="card" style="margin-bottom:12px"><h4>Pixels &amp; analytics tracking</h4><p>${detected.length ? detected.map((x) => "✅ " + esc(x)).join("<br>") : "No known analytics or advertising pixels found in DataForSEO's technology database for this domain."}</p><p class="hint">Detection is from DataForSEO's technology database. The 🛡️ Security Scanner tab also checks the site's live homepage code directly for Google Analytics, Google Tag Manager and the Meta Pixel.</p></div>`;
+  const head = `<p class="hint">Domain rank: ${fmt(r.domain_rank || 0)}${r.last_visited ? " · Last visited: " + esc(String(r.last_visited).slice(0, 10)) : ""}${Array.isArray(r.emails) && r.emails.length ? " · Public emails found: " + r.emails.map(esc).join(", ") : ""}</p>`;
+  $("domResults").innerHTML = pixelHtml + head + (rows.length ? table([{ label: "Category", key: "cat" }, { label: "Group", key: "group" }, { label: "Technology", key: "tech" }, { label: "Version", key: "ver" }], rows) : "<p class='hint'>No technology list returned for this domain — see raw data below.</p>") + rawDetails(data);
 }));
 
 /* ---------------- Website Security Scanner ---------------- */
