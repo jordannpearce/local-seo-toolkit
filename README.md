@@ -89,6 +89,10 @@ Every module and the exact endpoint it calls is documented in
 ## License
 
 MIT — use it, fork it, ship it for your clients. Attribution appreciated,
+
+## Created By
+
+Jordan Pearce was the creator of this repo. https://jordanpearce.com 
 not required.
 
 ---
