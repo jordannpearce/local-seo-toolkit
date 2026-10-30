@@ -92,8 +92,7 @@ MIT — use it, fork it, ship it for your clients. Attribution appreciated,
 
 ## Created By
 
-Jordan Pearce was the creator of this repo. https://jordanpearce.com 
-not required.
+Jordan Pearce was the creator of this repo. https://jordanpearce.com . For more questions, consulting bookings please email hire@info.jordanpearce.com
 
 ---
 
